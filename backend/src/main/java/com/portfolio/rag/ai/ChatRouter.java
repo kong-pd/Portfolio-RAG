@@ -29,6 +29,10 @@ public class ChatRouter {
      * response. Throws {@link RuntimeException} only when every provider fails.
      */
     public ChatResponse chat(String systemPrompt, List<Message> history, String userMessage) {
+        if (clients.isEmpty()) {
+            throw new RuntimeException("No AI chat providers are configured. "
+                    + "Set GROQ_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY.");
+        }
         Exception lastException = null;
         for (int i = 0; i < clients.size(); i++) {
             String name = i < providerNames.size() ? providerNames.get(i) : "provider-" + i;

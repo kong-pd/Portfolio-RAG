@@ -72,10 +72,11 @@ public class AiRoutingConfig {
             }
         }
         if (clients.isEmpty()) {
-            throw new IllegalStateException("No AI chat provider configured. Check "
-                    + "app.ai.chat.providers and the corresponding API keys.");
+            log.warn("No AI chat provider is reachable at startup (all API keys are blank). "
+                    + "Set GROQ_API_KEY, OPENAI_API_KEY, or GOOGLE_API_KEY before making chat requests.");
+        } else {
+            log.info("Chat routing active. Provider order (with fallback): {}", activeProviders);
         }
-        log.info("Chat routing active. Provider order (with fallback): {}", activeProviders);
         return new ChatRouter(clients, activeProviders);
     }
 
