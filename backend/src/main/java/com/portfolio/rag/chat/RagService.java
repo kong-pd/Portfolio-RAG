@@ -12,8 +12,8 @@ import com.portfolio.rag.repository.ConversationRepository;
 import com.portfolio.rag.repository.DocumentChunkRepository;
 import com.portfolio.rag.repository.DocumentChunkRepository.ChunkSearchResult;
 import com.portfolio.rag.repository.MessageRepository;
+import com.portfolio.rag.ai.ChatRouter;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.metadata.Usage;
@@ -46,7 +46,7 @@ public class RagService {
     private static final int HISTORY_LIMIT = 6;
     private static final int TITLE_MAX_LENGTH = 50;
 
-    private final ChatClient chatClient;
+    private final ChatRouter chatRouter;
     private final EmbeddingModel embeddingModel;
     private final ConversationRepository conversationRepository;
     private final MessageRepository messageRepository;
@@ -55,7 +55,7 @@ public class RagService {
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactionTemplate;
 
-    public RagService(ChatClient.Builder chatClientBuilder,
+    public RagService(ChatRouter chatRouter,
                       EmbeddingModel embeddingModel,
                       ConversationRepository conversationRepository,
                       MessageRepository messageRepository,
@@ -63,7 +63,7 @@ public class RagService {
                       AppProperties properties,
                       ObjectMapper objectMapper,
                       PlatformTransactionManager transactionManager) {
-        this.chatClient = chatClientBuilder.build();
+        this.chatRouter = chatRouter;
         this.embeddingModel = embeddingModel;
         this.conversationRepository = conversationRepository;
         this.messageRepository = messageRepository;
@@ -107,12 +107,7 @@ public class RagService {
                 .collect(Collectors.joining("\n---\n"));
         String systemPrompt = SYSTEM_PROMPT_TEMPLATE.formatted(context, question);
 
-        var chatResponse = chatClient.prompt()
-                .system(systemPrompt)
-                .messages(history)
-                .user(question)
-                .call()
-                .chatResponse();
+        var chatResponse = chatRouter.chat(systemPrompt, history, question);
         String answer = chatResponse != null && chatResponse.getResult() != null
                 ? chatResponse.getResult().getOutput().getText()
                 : null;

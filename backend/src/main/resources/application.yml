@@ -22,15 +22,6 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
-  ai:
-    openai:
-      api-key: ${OPENAI_API_KEY}
-      chat:
-        options:
-          model: gpt-4o
-      embedding:
-        options:
-          model: text-embedding-3-small
 
 management:
   endpoints:
@@ -49,3 +40,27 @@ app:
     chunk-overlap: 64
     top-k: 5
     similarity-threshold: 0.75
+  ai:
+    chat:
+      # Tried in order at runtime; first success wins, the rest are fallbacks.
+      providers:
+        - groq
+        - openai
+    embedding:
+      # Fixed at deploy time. Switching provider/dimensions requires re-embedding
+      # all documents and a matching DB vector(N) column.
+      provider: openai
+      dimensions: 1536
+    openai:
+      api-key: ${OPENAI_API_KEY:}
+      chat-model: gpt-4o
+      embedding-model: text-embedding-3-small
+    groq:
+      api-key: ${GROQ_API_KEY:}
+      chat-model: llama-3.3-70b-versatile
+      base-url: https://api.groq.com/openai
+    gemini:
+      api-key: ${GOOGLE_API_KEY:}
+      base-url: https://generativelanguage.googleapis.com/v1beta/openai
+      chat-model: gemini-2.0-flash
+      embedding-model: text-embedding-004   # 768-dim; switching needs schema migration
