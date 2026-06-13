@@ -25,9 +25,15 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiError> handleDataIntegrity(DataIntegrityViolationException ex) {
-        // The only unique constraint exposed through the API is users.email.
+        // Preserve the registration UX for the users.email unique constraint;
+        // any other integrity violation maps to a generic 409 CONFLICT.
+        String detail = ex.getMostSpecificCause().getMessage();
+        if (detail != null && detail.toLowerCase().contains("email")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiError.of("EMAIL_ALREADY_EXISTS", "该邮箱已被注册"));
+        }
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ApiError.of("EMAIL_ALREADY_EXISTS", "该邮箱已被注册"));
+                .body(ApiError.of("CONFLICT", "请求与当前资源状态冲突"));
     }
 
     @ExceptionHandler(EntityNotFoundException.class)

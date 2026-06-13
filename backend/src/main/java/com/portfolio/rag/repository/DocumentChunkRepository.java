@@ -9,6 +9,8 @@ import java.util.List;
 
 public interface DocumentChunkRepository extends JpaRepository<DocumentChunk, Long> {
 
+    List<DocumentChunk> findByDocumentIdOrderByChunkIndex(Long documentId);
+
     /**
      * Cosine similarity search, scoped to the owning user. The query vector is
      * passed in pgvector text format "[v1,v2,...]" and cast server-side.

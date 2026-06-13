@@ -25,15 +25,12 @@ spring:
   ai:
     openai:
       api-key: ${OPENAI_API_KEY}
+      chat:
+        options:
+          model: gpt-4o
       embedding:
         options:
           model: text-embedding-3-small
-    vectorstore:
-      pgvector:
-        dimensions: 1536
-        index-type: IVFFLAT
-        distance-type: COSINE_DISTANCE
-        initialize-schema: false
 
 management:
   endpoints:

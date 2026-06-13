@@ -1,5 +1,9 @@
 package com.portfolio.rag.document;
 
+import com.knuddels.jtokkit.Encodings;
+import com.knuddels.jtokkit.api.Encoding;
+import com.knuddels.jtokkit.api.EncodingType;
+import com.knuddels.jtokkit.api.IntArrayList;
 import com.portfolio.rag.config.AppProperties;
 import com.portfolio.rag.document.entity.Document;
 import com.portfolio.rag.document.entity.DocumentChunk;
@@ -24,15 +28,18 @@ import java.util.List;
 
 /**
  * Background pipeline: parse -> chunk -> embed -> persist.
- * Chunk size/overlap are configured in tokens and approximated as 4 chars/token.
+ * Chunking uses real token boundaries via jtokkit (cl100k_base encoding),
+ * with chunk size/overlap configured in tokens.
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class DocumentIngestionService {
 
-    private static final int CHARS_PER_TOKEN = 4;
     private static final int EMBEDDING_BATCH_SIZE = 32;
+
+    private static final Encoding ENCODING =
+            Encodings.newDefaultEncodingRegistry().getEncoding(EncodingType.CL100K_BASE);
 
     private final DocumentRepository documentRepository;
     private final DocumentChunkRepository chunkRepository;
@@ -75,6 +82,7 @@ public class DocumentIngestionService {
                             .embedding(vector)
                             .chunkIndex(chunkIndex++)
                             .pageNum(batch.get(i).pageNum())
+                            .tokenCount(batch.get(i).tokenCount())
                             .build());
                 }
                 chunkRepository.saveAll(entities);
@@ -94,9 +102,44 @@ public class DocumentIngestionService {
         }
     }
 
+    /**
+     * Re-embeds the chunks already persisted for a document. Used by the retry
+     * endpoint when an earlier ingestion failed after chunking (the original
+     * upload is not retained, so we cannot re-parse from source).
+     */
+    @Async
+    public void reingest(Long documentId, Long userId) {
+        try {
+            updateStatus(documentId, Document.STATUS_PROCESSING, null, null);
+
+            List<DocumentChunk> chunks = chunkRepository.findByDocumentIdOrderByChunkIndex(documentId);
+            if (chunks.isEmpty()) {
+                updateStatus(documentId, Document.STATUS_ERROR, null,
+                        "无法重试：未找到已解析的文档分块，请重新上传");
+                return;
+            }
+
+            for (int from = 0; from < chunks.size(); from += EMBEDDING_BATCH_SIZE) {
+                List<DocumentChunk> batch = chunks.subList(from, Math.min(from + EMBEDDING_BATCH_SIZE, chunks.size()));
+                EmbeddingResponse response =
+                        embeddingModel.embedForResponse(batch.stream().map(DocumentChunk::getContent).toList());
+                for (int i = 0; i < batch.size(); i++) {
+                    batch.get(i).setEmbedding(response.getResults().get(i).getOutput());
+                }
+                chunkRepository.saveAll(batch);
+            }
+
+            updateStatus(documentId, Document.STATUS_DONE, chunks.size(), null);
+            log.info("Document {} re-ingested: {} chunks", documentId, chunks.size());
+        } catch (Exception e) {
+            log.error("Re-ingestion failed for document {}", documentId, e);
+            updateStatus(documentId, Document.STATUS_ERROR, null, rootMessage(e));
+        }
+    }
+
     private List<ChunkData> parseAndChunk(Path file, String mimeType) throws IOException {
-        int chunkChars = properties.getRag().getChunkSize() * CHARS_PER_TOKEN;
-        int overlapChars = properties.getRag().getChunkOverlap() * CHARS_PER_TOKEN;
+        int windowTokens = properties.getRag().getChunkSize();
+        int overlapTokens = properties.getRag().getChunkOverlap();
 
         List<ChunkData> chunks = new ArrayList<>();
         if ("application/pdf".equals(mimeType)) {
@@ -106,33 +149,48 @@ public class DocumentIngestionService {
                     stripper.setStartPage(page);
                     stripper.setEndPage(page);
                     String pageText = stripper.getText(pdf);
-                    slidingWindow(pageText, page, chunkChars, overlapChars, chunks);
+                    slidingWindow(pageText, page, windowTokens, overlapTokens, chunks);
                 }
             }
         } else {
             String text = Files.readString(file, StandardCharsets.UTF_8);
-            slidingWindow(text, null, chunkChars, overlapChars, chunks);
+            slidingWindow(text, null, windowTokens, overlapTokens, chunks);
         }
         return chunks;
     }
 
-    private void slidingWindow(String text, Integer pageNum, int chunkChars, int overlapChars,
+    /**
+     * Token-level sliding window over cl100k_base tokens: encode the segment once,
+     * then emit overlapping windows of {@code windowTokens} tokens advancing by
+     * {@code windowTokens - overlapTokens} each step. Each window is decoded back
+     * to text and its exact token count recorded.
+     */
+    private void slidingWindow(String text, Integer pageNum, int windowTokens, int overlapTokens,
                                List<ChunkData> out) {
         if (text == null || text.isBlank()) {
             return;
         }
-        int length = text.length();
+        IntArrayList tokens = ENCODING.encode(text);
+        int total = tokens.size();
+        if (total == 0) {
+            return;
+        }
+        int step = Math.max(windowTokens - overlapTokens, 1);
         int start = 0;
-        while (start < length) {
-            int end = Math.min(start + chunkChars, length);
-            String piece = text.substring(start, end).strip();
-            if (!piece.isEmpty()) {
-                out.add(new ChunkData(piece, pageNum));
+        while (start < total) {
+            int end = Math.min(start + windowTokens, total);
+            IntArrayList window = new IntArrayList(end - start);
+            for (int i = start; i < end; i++) {
+                window.add(tokens.get(i));
             }
-            if (end == length) {
+            String piece = ENCODING.decode(window).strip();
+            if (!piece.isEmpty()) {
+                out.add(new ChunkData(piece, pageNum, end - start));
+            }
+            if (end == total) {
                 break;
             }
-            start = end - overlapChars;
+            start += step;
         }
     }
 
@@ -156,6 +214,6 @@ public class DocumentIngestionService {
         return msg != null ? msg : cause.getClass().getSimpleName();
     }
 
-    private record ChunkData(String text, Integer pageNum) {
+    private record ChunkData(String text, Integer pageNum, Integer tokenCount) {
     }
 }

@@ -69,9 +69,31 @@ public class DocumentService {
 
     @Transactional(readOnly = true)
     public PageResponse<DocumentDTO> list(Long userId, int page, int size) {
-        var pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 100),
+        var pageable = PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 50),
                 Sort.by(Sort.Direction.DESC, "createdAt"));
         return PageResponse.from(documentRepository.findByUserId(userId, pageable), DocumentDTO::from);
+    }
+
+    /**
+     * Re-runs ingestion for a document stuck in the {@code error} state by
+     * re-embedding its persisted chunks. The original upload is not retained,
+     * so retry only applies to failures after chunking; parse-stage failures
+     * leave no chunks and require a fresh upload.
+     */
+    public UploadResponse retry(Long userId, Long documentId) {
+        Document document = documentRepository.findByIdAndUserId(documentId, userId)
+                .orElseThrow(() -> new EntityNotFoundException("文档不存在"));
+        if (!Document.STATUS_ERROR.equals(document.getStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT, "DOCUMENT_NOT_RETRYABLE",
+                    "仅失败状态的文档可以重试");
+        }
+
+        document.setStatus(Document.STATUS_PENDING);
+        document.setErrorMsg(null);
+        documentRepository.save(document);
+
+        ingestionService.reingest(document.getId(), userId);
+        return new UploadResponse(document.getId(), Document.STATUS_PENDING);
     }
 
     @Transactional

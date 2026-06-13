@@ -37,12 +37,22 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void dataIntegrityViolation_maps409EmailAlreadyExists() {
+    void dataIntegrityViolation_emailConstraint_maps409EmailAlreadyExists() {
+        ResponseEntity<ApiError> response = handler.handleDataIntegrity(
+                new DataIntegrityViolationException(
+                        "duplicate key value violates unique constraint \"users_email_key\""));
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody().code()).isEqualTo("EMAIL_ALREADY_EXISTS");
+    }
+
+    @Test
+    void dataIntegrityViolation_otherConstraint_maps409GenericConflict() {
         ResponseEntity<ApiError> response =
                 handler.handleDataIntegrity(new DataIntegrityViolationException("duplicate key"));
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-        assertThat(response.getBody().code()).isEqualTo("EMAIL_ALREADY_EXISTS");
+        assertThat(response.getBody().code()).isEqualTo("CONFLICT");
     }
 
     @Test

@@ -16,9 +16,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -51,6 +53,7 @@ public class RagService {
     private final DocumentChunkRepository chunkRepository;
     private final AppProperties properties;
     private final ObjectMapper objectMapper;
+    private final TransactionTemplate transactionTemplate;
 
     public RagService(ChatClient.Builder chatClientBuilder,
                       EmbeddingModel embeddingModel,
@@ -58,7 +61,8 @@ public class RagService {
                       MessageRepository messageRepository,
                       DocumentChunkRepository chunkRepository,
                       AppProperties properties,
-                      ObjectMapper objectMapper) {
+                      ObjectMapper objectMapper,
+                      PlatformTransactionManager transactionManager) {
         this.chatClient = chatClientBuilder.build();
         this.embeddingModel = embeddingModel;
         this.conversationRepository = conversationRepository;
@@ -66,17 +70,20 @@ public class RagService {
         this.chunkRepository = chunkRepository;
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
-    @Transactional
     public ChatResponse ask(Long userId, String question, Long conversationId) {
-        Conversation conversation = resolveConversation(userId, question, conversationId);
+        // Short transaction A: resolve or create the conversation.
+        Conversation conversation =
+                transactionTemplate.execute(status -> resolveConversation(userId, question, conversationId));
+        final Long conversationIdResolved = conversation.getId();
 
-        // History must be captured before persisting the new user message.
+        // History (read-only) must be captured before persisting the new user message.
         List<org.springframework.ai.chat.messages.Message> history =
-                loadHistory(conversation.getId(), userId);
+                loadHistory(conversationIdResolved, userId);
 
-        // 1. Embed question and retrieve relevant chunks (user-scoped).
+        // No-TX section: embed question and retrieve relevant chunks (user-scoped).
         float[] queryVector = embeddingModel.embed(question);
         List<ChunkSearchResult> chunks = chunkRepository.searchSimilar(
                 userId,
@@ -84,31 +91,41 @@ public class RagService {
                 properties.getRag().getSimilarityThreshold(),
                 properties.getRag().getTopK());
 
-        saveMessage(conversation, userId, Message.ROLE_USER, question, null);
-
         if (chunks.isEmpty()) {
-            saveMessage(conversation, userId, Message.ROLE_ASSISTANT, NO_CONTEXT_ANSWER, List.of());
-            touch(conversation);
-            return new ChatResponse(conversation.getId(), NO_CONTEXT_ANSWER, List.of());
+            // Short transaction B: persist the empty-context turn atomically.
+            transactionTemplate.executeWithoutResult(status -> {
+                saveMessage(conversation, userId, Message.ROLE_USER, question, null, null, null);
+                saveMessage(conversation, userId, Message.ROLE_ASSISTANT, NO_CONTEXT_ANSWER, List.of(), null, null);
+                touch(conversation);
+            });
+            return new ChatResponse(conversationIdResolved, NO_CONTEXT_ANSWER, List.of());
         }
 
-        // 2. Build prompt and call the LLM synchronously.
+        // No-TX section: build prompt and call the LLM synchronously.
         String context = chunks.stream()
                 .map(ChunkSearchResult::getContent)
                 .collect(Collectors.joining("\n---\n"));
         String systemPrompt = SYSTEM_PROMPT_TEMPLATE.formatted(context, question);
 
-        String answer = chatClient.prompt()
+        var chatResponse = chatClient.prompt()
                 .system(systemPrompt)
                 .messages(history)
                 .user(question)
                 .call()
-                .content();
+                .chatResponse();
+        String answer = chatResponse != null && chatResponse.getResult() != null
+                ? chatResponse.getResult().getOutput().getText()
+                : null;
         if (answer == null) {
             answer = "";
         }
+        Usage usage = chatResponse != null && chatResponse.getMetadata() != null
+                ? chatResponse.getMetadata().getUsage() : null;
+        Integer promptTokens = usage != null && usage.getPromptTokens() != null
+                ? usage.getPromptTokens() : null;
+        Integer completionTokens = usage != null && usage.getCompletionTokens() != null
+                ? usage.getCompletionTokens() : null;
 
-        // 3. Persist the assistant turn with its sources.
         List<SourceItem> sources = chunks.stream()
                 .map(c -> new SourceItem(
                         c.getChunkId(),
@@ -117,10 +134,17 @@ public class RagService {
                         c.getScore() != null ? c.getScore() : 0.0,
                         c.getPageNum()))
                 .toList();
-        saveMessage(conversation, userId, Message.ROLE_ASSISTANT, answer, sources);
-        touch(conversation);
 
-        return new ChatResponse(conversation.getId(), answer, sources);
+        // Short transaction B: persist user + assistant turns and touch the conversation atomically.
+        final String finalAnswer = answer;
+        transactionTemplate.executeWithoutResult(status -> {
+            saveMessage(conversation, userId, Message.ROLE_USER, question, null, null, null);
+            saveMessage(conversation, userId, Message.ROLE_ASSISTANT, finalAnswer, sources,
+                    promptTokens, completionTokens);
+            touch(conversation);
+        });
+
+        return new ChatResponse(conversationIdResolved, answer, sources);
     }
 
     private Conversation resolveConversation(Long userId, String question, Long conversationId) {
@@ -154,13 +178,16 @@ public class RagService {
     }
 
     private void saveMessage(Conversation conversation, Long userId, String role,
-                             String content, List<SourceItem> sources) {
+                             String content, List<SourceItem> sources,
+                             Integer promptTokens, Integer completionTokens) {
         messageRepository.save(Message.builder()
                 .conversationId(conversation.getId())
                 .userId(userId)
                 .role(role)
                 .content(content)
                 .sources(sources != null ? toJson(sources) : null)
+                .promptTokens(promptTokens)
+                .completionTokens(completionTokens)
                 .build());
     }
 

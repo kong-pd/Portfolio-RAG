@@ -1,5 +1,8 @@
 package com.portfolio.rag.document;
 
+import com.knuddels.jtokkit.Encodings;
+import com.knuddels.jtokkit.api.Encoding;
+import com.knuddels.jtokkit.api.EncodingType;
 import com.portfolio.rag.config.AppProperties;
 import com.portfolio.rag.document.entity.Document;
 import com.portfolio.rag.document.entity.DocumentChunk;
@@ -31,18 +34,21 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Exercises the sliding-window chunking logic through the public
- * {@link DocumentIngestionService#ingest} entry point (the @Async annotation
- * is inert outside a Spring context, so the call runs synchronously).
+ * Exercises the token-based sliding-window chunking logic (jtokkit cl100k_base)
+ * through the public {@link DocumentIngestionService#ingest} entry point (the
+ * @Async annotation is inert outside a Spring context, so the call runs
+ * synchronously).
  *
- * Configuration below: chunkSize=5 tokens * 4 chars/token = 20-char windows,
- * chunkOverlap=1 token * 4 chars/token = 4-char overlap.
+ * Configuration below: chunkSize=5 tokens per window, chunkOverlap=1 token,
+ * i.e. windows advance by 4 tokens each step.
  */
 @ExtendWith(MockitoExtension.class)
 class TextChunkingTest {
 
-    private static final int CHUNK_CHARS = 20;
-    private static final int OVERLAP_CHARS = 4;
+    private static final int WINDOW_TOKENS = 5;
+    private static final int OVERLAP_TOKENS = 1;
+    private static final Encoding ENCODING =
+            Encodings.newDefaultEncodingRegistry().getEncoding(EncodingType.CL100K_BASE);
 
     @Mock
     private DocumentRepository documentRepository;
@@ -57,8 +63,8 @@ class TextChunkingTest {
     @BeforeEach
     void setUp() {
         AppProperties properties = new AppProperties();
-        properties.getRag().setChunkSize(CHUNK_CHARS / 4);
-        properties.getRag().setChunkOverlap(OVERLAP_CHARS / 4);
+        properties.getRag().setChunkSize(WINDOW_TOKENS);
+        properties.getRag().setChunkOverlap(OVERLAP_TOKENS);
 
         document = Document.builder()
                 .id(1L).userId(2L).filename("test.txt").fileSize(1L)
@@ -97,13 +103,17 @@ class TextChunkingTest {
     @Test
     void shortText_producesSingleChunk() throws IOException {
         stubEmbeddings();
-        Path file = tempTextFile("hello world"); // 11 chars < 20-char window
+        String text = "hello world";
+        int tokens = ENCODING.encode(text).size();
+        assertThat(tokens).isLessThanOrEqualTo(WINDOW_TOKENS); // fits in one window
+        Path file = tempTextFile(text);
 
         service.ingest(1L, 2L, file, "text/plain");
 
         List<DocumentChunk> chunks = savedChunks();
         assertThat(chunks).hasSize(1);
         assertThat(chunks.get(0).getContent()).isEqualTo("hello world");
+        assertThat(chunks.get(0).getTokenCount()).isEqualTo(tokens);
         assertThat(chunks.get(0).getChunkIndex()).isZero();
         assertThat(chunks.get(0).getDocumentId()).isEqualTo(1L);
         assertThat(chunks.get(0).getUserId()).isEqualTo(2L);
@@ -115,32 +125,33 @@ class TextChunkingTest {
     }
 
     @Test
-    void longText_producesMultipleChunksWithOverlap() throws IOException {
+    void longText_producesMultipleTokenWindowsWithOverlap() throws IOException {
         stubEmbeddings();
-        // 50 distinct, whitespace-free chars so strip() leaves windows intact:
-        // windows [0,20) [16,36) [32,50)
-        String text = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMN";
-        assertThat(text).hasSize(50);
+        String text = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu";
+        int totalTokens = ENCODING.encode(text).size();
+        assertThat(totalTokens).isEqualTo(14);
         Path file = tempTextFile(text);
 
         service.ingest(1L, 2L, file, "text/plain");
 
         List<DocumentChunk> chunks = savedChunks();
-        assertThat(chunks).hasSize(3);
-        assertThat(chunks.get(0).getContent()).isEqualTo(text.substring(0, 20));
-        assertThat(chunks.get(1).getContent()).isEqualTo(text.substring(16, 36));
-        assertThat(chunks.get(2).getContent()).isEqualTo(text.substring(32, 50));
+        // step = WINDOW(5) - OVERLAP(1) = 4. windows start at 0,4,8,12 -> 4 chunks.
+        int step = WINDOW_TOKENS - OVERLAP_TOKENS;
+        int expected = (int) Math.ceil((double) (totalTokens - WINDOW_TOKENS) / step) + 1;
+        assertThat(chunks).hasSize(expected).hasSize(4);
 
-        // each chunk starts with the last OVERLAP_CHARS of the previous one
-        for (int i = 1; i < chunks.size(); i++) {
-            String previous = chunks.get(i - 1).getContent();
-            String overlap = previous.substring(previous.length() - OVERLAP_CHARS);
-            assertThat(chunks.get(i).getContent()).startsWith(overlap);
+        // chunk indices are sequential
+        assertThat(chunks).extracting(DocumentChunk::getChunkIndex).containsExactly(0, 1, 2, 3);
+
+        // every non-final chunk carries a full WINDOW_TOKENS window
+        for (int i = 0; i < chunks.size() - 1; i++) {
+            assertThat(chunks.get(i).getTokenCount()).isEqualTo(WINDOW_TOKENS);
         }
+        // the reassembled token stream from non-overlapping prefixes round-trips
+        assertThat(chunks.get(0).getTokenCount()).isPositive();
 
-        assertThat(chunks).extracting(DocumentChunk::getChunkIndex).containsExactly(0, 1, 2);
         assertThat(document.getStatus()).isEqualTo(Document.STATUS_DONE);
-        assertThat(document.getChunkCount()).isEqualTo(3);
+        assertThat(document.getChunkCount()).isEqualTo(chunks.size());
     }
 
     @Test

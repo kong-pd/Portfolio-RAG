@@ -48,6 +48,9 @@ public class DocumentChunk {
     @Column(name = "page_num")
     private Integer pageNum;
 
+    @Column(name = "token_count")
+    private Integer tokenCount;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 

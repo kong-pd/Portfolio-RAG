@@ -55,17 +55,17 @@ CREATE TABLE document_chunks (
     embedding   vector(1536),
     chunk_index INT          NOT NULL,
     page_num    INT,
+    token_count INT,
     created_at  TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_document_chunks_document_id ON document_chunks (document_id);
 CREATE INDEX idx_document_chunks_user_id ON document_chunks (user_id);
 
--- IVFFlat index for cosine similarity search
-CREATE INDEX idx_document_chunks_embedding
-    ON document_chunks
-    USING ivfflat (embedding vector_cosine_ops)
-    WITH (lists = 100);
+-- HNSW index for cosine similarity search
+CREATE INDEX IF NOT EXISTS idx_chunks_embedding
+    ON document_chunks USING hnsw (embedding vector_cosine_ops)
+    WITH (m = 16, ef_construction = 64);
 
 -- ---------------------------------------------------------------------------
 -- conversations

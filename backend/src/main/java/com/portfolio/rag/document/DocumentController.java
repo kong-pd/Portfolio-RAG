@@ -35,6 +35,12 @@ public class DocumentController {
         return documentService.list(SecurityUtils.getCurrentUserId(), page, size);
     }
 
+    @PostMapping("/{id}/retry")
+    public ResponseEntity<UploadResponse> retry(@PathVariable Long id) {
+        UploadResponse response = documentService.retry(SecurityUtils.getCurrentUserId(), id);
+        return ResponseEntity.ok(response);
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         documentService.delete(SecurityUtils.getCurrentUserId(), id);
