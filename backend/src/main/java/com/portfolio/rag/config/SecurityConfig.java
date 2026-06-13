@@ -53,7 +53,7 @@ public class SecurityConfig {
             if (code == null) {
                 code = "UNAUTHORIZED";
             }
-            String message = "TOKEN_EXPIRED".equals(code) ? "访问令牌已过期" : "未认证或令牌无效";
+            String message = "TOKEN_EXPIRED".equals(code) ? "Access token has expired" : "Unauthenticated or token invalid";
             response.setStatus(401);
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             response.setCharacterEncoding("UTF-8");

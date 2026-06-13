@@ -3,6 +3,16 @@ import { login, register } from '../api/auth'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+function extractMessage(err, fallback) {
+  const data = err.response?.data
+  if (data && typeof data === 'object' && data.message) return data.message
+  if (typeof data === 'string') {
+    try { return JSON.parse(data)?.message || data } catch {}
+    return data
+  }
+  return fallback
+}
+
 function AuthPage({ onAuthenticated }) {
   const [mode, setMode] = useState('login') // 'login' | 'register'
   const [email, setEmail] = useState('')
@@ -14,10 +24,10 @@ function AuthPage({ onAuthenticated }) {
   function validate() {
     const errors = {}
     if (!EMAIL_RE.test(email)) {
-      errors.email = '请输入有效的邮箱地址'
+      errors.email = 'Please enter a valid email address.'
     }
     if (password.length < 8) {
-      errors.password = '密码至少需要 8 位'
+      errors.password = 'Password must be at least 8 characters.'
     }
     setFieldErrors(errors)
     return Object.keys(errors).length === 0
@@ -41,13 +51,11 @@ function AuthPage({ onAuthenticated }) {
     } catch (err) {
       const status = err.response?.status
       if (mode === 'register' && status === 409) {
-        setFormError('该邮箱已被注册，请直接登录或更换邮箱。')
-      } else if (mode === 'login' && status === 401) {
-        setFormError('邮箱或密码错误，请重试。')
+        setFormError('Email already registered. Please sign in instead.')
+      } else if (status === 401) {
+        setFormError('Incorrect email or password. Please try again.')
       } else {
-        setFormError(
-          err.response?.data?.message || '操作失败，请稍后重试。'
-        )
+        setFormError(extractMessage(err, 'Something went wrong. Please try again.'))
       }
     } finally {
       setSubmitting(false)
@@ -82,11 +90,11 @@ function AuthPage({ onAuthenticated }) {
       >
         <h1 style={{ margin: '0 0 4px', fontSize: 24 }}>Portfolio RAG</h1>
         <p style={{ margin: '0 0 24px', color: '#666', fontSize: 14 }}>
-          {mode === 'login' ? '登录你的账户' : '创建一个新账户'}
+          {mode === 'login' ? 'Sign in to your account' : 'Create a new account'}
         </p>
 
         <label style={{ display: 'block', marginBottom: 16 }}>
-          <span style={{ fontSize: 13, color: '#444' }}>邮箱</span>
+          <span style={{ fontSize: 13, color: '#444' }}>Email</span>
           <input
             type="email"
             value={email}
@@ -100,7 +108,7 @@ function AuthPage({ onAuthenticated }) {
         </label>
 
         <label style={{ display: 'block', marginBottom: 16 }}>
-          <span style={{ fontSize: 13, color: '#444' }}>密码</span>
+          <span style={{ fontSize: 13, color: '#444' }}>Password</span>
           <input
             type="password"
             value={password}
@@ -146,10 +154,10 @@ function AuthPage({ onAuthenticated }) {
           }}
         >
           {submitting
-            ? '处理中…'
+            ? 'Please wait…'
             : mode === 'login'
-              ? '登录'
-              : '注册'}
+              ? 'Sign In'
+              : 'Sign Up'}
         </button>
 
         <p
@@ -160,7 +168,7 @@ function AuthPage({ onAuthenticated }) {
             color: '#666',
           }}
         >
-          {mode === 'login' ? '还没有账户？' : '已经有账户了？'}{' '}
+          {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}{' '}
           <button
             type="button"
             onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
@@ -173,7 +181,7 @@ function AuthPage({ onAuthenticated }) {
               padding: 0,
             }}
           >
-            {mode === 'login' ? '去注册' : '去登录'}
+            {mode === 'login' ? 'Sign up' : 'Sign in'}
           </button>
         </p>
       </form>

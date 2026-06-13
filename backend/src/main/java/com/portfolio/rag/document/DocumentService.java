@@ -38,10 +38,10 @@ public class DocumentService {
 
     public UploadResponse upload(Long userId, MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", "上传文件不能为空");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", "Upload file must not be empty");
         }
         if (file.getSize() > MAX_FILE_SIZE) {
-            throw new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "PAYLOAD_TOO_LARGE", "文件大小超过 20MB 限制");
+            throw new ApiException(HttpStatus.PAYLOAD_TOO_LARGE, "PAYLOAD_TOO_LARGE", "File size exceeds the 20 MB limit");
         }
 
         String mimeType = detectMimeType(file);
@@ -51,7 +51,7 @@ public class DocumentService {
             tempFile = Files.createTempFile("rag-upload-", ".bin");
             file.transferTo(tempFile);
         } catch (IOException e) {
-            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "文件保存失败");
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Failed to save file");
         }
 
         Document document = Document.builder()
@@ -82,10 +82,10 @@ public class DocumentService {
      */
     public UploadResponse retry(Long userId, Long documentId) {
         Document document = documentRepository.findByIdAndUserId(documentId, userId)
-                .orElseThrow(() -> new EntityNotFoundException("文档不存在"));
+                .orElseThrow(() -> new EntityNotFoundException("Document not found"));
         if (!Document.STATUS_ERROR.equals(document.getStatus())) {
             throw new ApiException(HttpStatus.CONFLICT, "DOCUMENT_NOT_RETRYABLE",
-                    "仅失败状态的文档可以重试");
+                    "Only documents in failed status can be retried");
         }
 
         document.setStatus(Document.STATUS_PENDING);
@@ -99,7 +99,7 @@ public class DocumentService {
     @Transactional
     public void delete(Long userId, Long documentId) {
         Document document = documentRepository.findByIdAndUserId(documentId, userId)
-                .orElseThrow(() -> new EntityNotFoundException("文档不存在"));
+                .orElseThrow(() -> new EntityNotFoundException("Document not found"));
         // document_chunks rows cascade via FK ON DELETE CASCADE
         documentRepository.delete(document);
     }
@@ -114,7 +114,7 @@ public class DocumentService {
         try (InputStream in = file.getInputStream()) {
             head = in.readNBytes(4096);
         } catch (IOException e) {
-            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "文件读取失败");
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR", "Failed to read file");
         }
 
         if (head.length >= 4

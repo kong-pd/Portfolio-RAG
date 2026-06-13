@@ -32,15 +32,16 @@ import java.util.stream.Collectors;
 public class RagService {
 
     private static final String NO_CONTEXT_ANSWER =
-            "知识库中未找到与该问题相关的内容。可以尝试换一种问法，或先上传相关文档。";
+            "No relevant content was found in the knowledge base for your question. " +
+            "Try rephrasing your question, or upload related documents first.";
 
     private static final String SYSTEM_PROMPT_TEMPLATE = """
-            你是一个文档问答助手。请根据以下检索到的文档内容回答用户的问题。回答要准确、简洁，并仅基于提供的内容。如果内容不足以回答问题，请说明。
+            You are a document Q&A assistant. Answer the user's question based solely on the retrieved document excerpts below. Be accurate and concise. If the provided content is insufficient to answer the question, say so clearly.
 
-            [文档内容]
+            [Document content]
             %s
 
-            [问题]
+            [Question]
             %s""";
 
     private static final int HISTORY_LIMIT = 6;
@@ -154,7 +155,7 @@ public class RagService {
         }
         // Wrong owner -> 404, never 403 (D-03).
         return conversationRepository.findByIdAndUserId(conversationId, userId)
-                .orElseThrow(() -> new EntityNotFoundException("会话不存在"));
+                .orElseThrow(() -> new EntityNotFoundException("Conversation not found"));
     }
 
     private List<org.springframework.ai.chat.messages.Message> loadHistory(Long conversationId, Long userId) {

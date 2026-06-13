@@ -60,13 +60,13 @@ function App() {
               active={view === 'chat'}
               onClick={() => setView('chat')}
             >
-              对话
+              Chat
             </NavButton>
             <NavButton
               active={view === 'documents'}
               onClick={() => setView('documents')}
             >
-              文档管理
+              Documents
             </NavButton>
           </nav>
         </div>
@@ -82,7 +82,7 @@ function App() {
             fontSize: 14,
           }}
         >
-          登出
+          Sign out
         </button>
       </header>
 

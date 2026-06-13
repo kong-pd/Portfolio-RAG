@@ -19,12 +19,12 @@ function ConversationList({
           cursor: 'pointer',
         }}
       >
-        + 新建对话
+        + New Chat
       </button>
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px 12px' }}>
         {(!conversations || conversations.length === 0) && (
           <p style={{ color: '#888', padding: '8px 4px', fontSize: 14 }}>
-            暂无历史对话
+            No conversations yet
           </p>
         )}
         {conversations &&
@@ -32,7 +32,7 @@ function ConversationList({
             const id = c.id ?? c.conversationId
             const active = id === activeId
             const title =
-              c.title || c.firstMessage || `对话 ${String(id).slice(0, 8)}`
+              c.title || c.firstMessage || `Chat ${String(id).slice(0, 8)}`
             return (
               <div
                 key={id}

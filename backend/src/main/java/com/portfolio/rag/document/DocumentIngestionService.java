@@ -57,12 +57,12 @@ public class DocumentIngestionService {
             } catch (Exception e) {
                 log.warn("Failed to parse document {}", documentId, e);
                 updateStatus(documentId, Document.STATUS_ERROR, null,
-                        "无法解析文件：" + rootMessage(e));
+                        "Failed to parse file: " + rootMessage(e));
                 return;
             }
 
             if (chunks.isEmpty()) {
-                updateStatus(documentId, Document.STATUS_ERROR, null, "无法解析文件：文件内容为空");
+                updateStatus(documentId, Document.STATUS_ERROR, null, "Failed to parse file: file content is empty");
                 return;
             }
 
@@ -115,7 +115,7 @@ public class DocumentIngestionService {
             List<DocumentChunk> chunks = chunkRepository.findByDocumentIdOrderByChunkIndex(documentId);
             if (chunks.isEmpty()) {
                 updateStatus(documentId, Document.STATUS_ERROR, null,
-                        "无法重试：未找到已解析的文档分块，请重新上传");
+                        "Cannot retry: no parsed chunks found. Please re-upload the document.");
                 return;
             }
 

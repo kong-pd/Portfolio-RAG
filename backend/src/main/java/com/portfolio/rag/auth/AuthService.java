@@ -29,7 +29,7 @@ public class AuthService {
     @Transactional
     public Long register(String email, String rawPassword) {
         if (userRepository.existsByEmail(email)) {
-            throw new ApiException(HttpStatus.CONFLICT, "EMAIL_ALREADY_EXISTS", "该邮箱已被注册");
+            throw new ApiException(HttpStatus.CONFLICT, "EMAIL_ALREADY_EXISTS", "Email already registered");
         }
         User user = User.builder()
                 .email(email)
@@ -42,7 +42,7 @@ public class AuthService {
     public LoginResponse login(String email, String rawPassword) {
         User user = userRepository.findByEmail(email)
                 .filter(u -> passwordEncoder.matches(rawPassword, u.getPasswordHash()))
-                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "邮箱或密码错误"));
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "BAD_CREDENTIALS", "Invalid email or password"));
 
         String accessToken = jwtService.generateAccessToken(user.getId());
         RefreshToken refreshToken = RefreshToken.builder()

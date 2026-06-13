@@ -11,18 +11,18 @@ function SourceCitations({ sources }) {
         color: '#555',
       }}
     >
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>来源引用</div>
+      <div style={{ fontWeight: 600, marginBottom: 4 }}>Sources</div>
       <ul style={{ margin: 0, paddingLeft: 16 }}>
         {sources.map((s, i) => (
           <li key={s.chunkId ?? i} style={{ marginBottom: 2 }}>
             <span style={{ fontWeight: 500 }}>{s.filename}</span>
             {s.pageNum != null && (
-              <span style={{ color: '#888' }}> (第 {s.pageNum} 页)</span>
+              <span style={{ color: '#888' }}> (p. {s.pageNum})</span>
             )}
             {s.score != null && (
               <span style={{ color: '#2563eb' }}>
                 {' '}
-                — 相似度 {(s.score * 100).toFixed(1)}%
+                — {(s.score * 100).toFixed(1)}% match
               </span>
             )}
           </li>

@@ -47,10 +47,10 @@ function DocumentsPage() {
   function validateFile(file) {
     const ext = file.name.split('.').pop()?.toLowerCase()
     if (!ALLOWED_EXT.includes(ext)) {
-      return `不支持的文件类型「.${ext}」，仅支持 pdf / txt / md。`
+      return `Unsupported file type ".${ext}". Only pdf, txt, and md are allowed.`
     }
     if (file.size > MAX_SIZE) {
-      return `文件过大（${(file.size / 1024 / 1024).toFixed(1)} MB），上限为 20 MB。`
+      return `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum size is 20 MB.`
     }
     return null
   }
@@ -72,7 +72,7 @@ function DocumentsPage() {
       await fetchDocuments()
     } catch (e) {
       setUploadError(
-        e.response?.data?.message || '上传失败，请稍后重试。'
+        e.response?.data?.message || 'Upload failed. Please try again.'
       )
     } finally {
       setUploading(false)
@@ -98,7 +98,7 @@ function DocumentsPage() {
   }
 
   async function handleDelete(id, name) {
-    if (!window.confirm(`确定要删除「${name}」吗？此操作不可撤销。`)) return
+    if (!window.confirm(`Delete "${name}"? This action cannot be undone.`)) return
     setBusyId(id)
     try {
       await deleteDocument(id)
@@ -112,7 +112,7 @@ function DocumentsPage() {
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '24px 16px' }}>
-      <h2 style={{ marginTop: 0 }}>文档管理</h2>
+      <h2 style={{ marginTop: 0 }}>Documents</h2>
 
       <div
         onDragOver={(e) => e.preventDefault()}
@@ -137,12 +137,12 @@ function DocumentsPage() {
           onChange={(e) => handleFiles(e.target.files)}
         />
         {uploading ? (
-          <span>上传中…</span>
+          <span>Uploading…</span>
         ) : (
           <span>
-            点击或拖拽文件到此处上传
+            Click or drag files here to upload
             <br />
-            <small style={{ color: '#999' }}>支持 pdf / txt / md，最大 20 MB</small>
+            <small style={{ color: '#999' }}>Supports pdf / txt / md, max 20 MB</small>
           </span>
         )}
       </div>
@@ -163,7 +163,7 @@ function DocumentsPage() {
       )}
 
       {loading ? (
-        <p style={{ color: '#888' }}>加载中…</p>
+        <p style={{ color: '#888' }}>Loading…</p>
       ) : (
         <DocumentList
           documents={documents}

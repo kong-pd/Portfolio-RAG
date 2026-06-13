@@ -98,7 +98,7 @@ function ChatPage() {
         role: 'assistant',
         content:
           err.response?.data?.message ||
-          '抱歉，发送失败，请稍后重试。',
+          'Something went wrong. Please try again.',
       }
       setMessages((prev) => [...prev, errMsg])
     } finally {
@@ -144,7 +144,7 @@ function ChatPage() {
           }}
         >
           {loadingMessages ? (
-            <p style={{ color: '#888' }}>加载消息中…</p>
+            <p style={{ color: '#888' }}>Loading messages…</p>
           ) : messages.length === 0 ? (
             <div
               style={{
@@ -157,9 +157,9 @@ function ChatPage() {
               }}
             >
               <div>
-                <p style={{ fontSize: 18, margin: 0 }}>开始一个新对话</p>
+                <p style={{ fontSize: 18, margin: 0 }}>Start a new conversation</p>
                 <p style={{ fontSize: 14 }}>
-                  基于你上传的文档提问，回答会附带来源引用。
+                  Ask questions about your uploaded documents. Answers include source citations.
                 </p>
               </div>
             </div>
@@ -175,7 +175,7 @@ function ChatPage() {
           )}
           {sending && (
             <div style={{ color: '#888', fontSize: 14, paddingLeft: 4 }}>
-              正在生成回答…
+              Generating response…
             </div>
           )}
         </div>
@@ -195,7 +195,7 @@ function ChatPage() {
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             disabled={sending}
-            placeholder="输入你的问题…"
+            placeholder="Type your question…"
             style={{
               flex: 1,
               padding: '12px 14px',
@@ -220,7 +220,7 @@ function ChatPage() {
                 sending || !question.trim() ? 'not-allowed' : 'pointer',
             }}
           >
-            {sending ? '发送中…' : '发送'}
+            {sending ? 'Sending…' : 'Send'}
           </button>
         </form>
       </section>

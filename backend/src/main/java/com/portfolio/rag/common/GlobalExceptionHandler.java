@@ -30,10 +30,10 @@ public class GlobalExceptionHandler {
         String detail = ex.getMostSpecificCause().getMessage();
         if (detail != null && detail.toLowerCase().contains("email")) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(ApiError.of("EMAIL_ALREADY_EXISTS", "该邮箱已被注册"));
+                    .body(ApiError.of("EMAIL_ALREADY_EXISTS", "Email already registered"));
         }
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(ApiError.of("CONFLICT", "请求与当前资源状态冲突"));
+                .body(ApiError.of("CONFLICT", "Request conflicts with the current resource state"));
     }
 
     @ExceptionHandler(EntityNotFoundException.class)
@@ -45,7 +45,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiError> handleMaxUpload(MaxUploadSizeExceededException ex) {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
-                .body(ApiError.of("PAYLOAD_TOO_LARGE", "文件大小超过 20MB 限制"));
+                .body(ApiError.of("PAYLOAD_TOO_LARGE", "File size exceeds the 20 MB limit"));
     }
 
     @ExceptionHandler(ApiException.class)
@@ -58,6 +58,6 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleGeneric(Exception ex) {
         log.error("Unhandled exception", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiError.of("INTERNAL_ERROR", "服务器内部错误，请稍后重试"));
+                .body(ApiError.of("INTERNAL_ERROR", "An internal server error occurred. Please try again later."));
     }
 }
