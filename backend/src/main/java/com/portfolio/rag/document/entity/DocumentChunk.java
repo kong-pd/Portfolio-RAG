@@ -39,7 +39,7 @@ public class DocumentChunk {
     private String content;
 
     @Convert(converter = VectorConverter.class)
-    @Column(columnDefinition = "vector(1536)")
+    @Column(columnDefinition = "vector(768)")
     private float[] embedding;
 
     @Column(name = "chunk_index", nullable = false)

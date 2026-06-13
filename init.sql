@@ -45,14 +45,14 @@ CREATE TABLE documents (
 CREATE INDEX idx_documents_user_id ON documents (user_id);
 
 -- ---------------------------------------------------------------------------
--- document_chunks (1536-dim embeddings: text-embedding-3-small)
+-- document_chunks (768-dim embeddings: gemini text-embedding-004)
 -- ---------------------------------------------------------------------------
 CREATE TABLE document_chunks (
     id          BIGSERIAL PRIMARY KEY,
     document_id BIGINT       NOT NULL REFERENCES documents (id) ON DELETE CASCADE,
     user_id     BIGINT       NOT NULL REFERENCES users (id),
     content     TEXT         NOT NULL,
-    embedding   vector(1536),
+    embedding   vector(768),
     chunk_index INT          NOT NULL,
     page_num    INT,
     token_count INT,

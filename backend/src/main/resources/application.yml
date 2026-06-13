@@ -12,7 +12,7 @@ spring:
     hikari:
       data-source-properties:
         # Lets the pg driver send untyped strings so they can be implicitly
-        # cast to non-varchar columns (vector(1536), jsonb).
+        # cast to non-varchar columns (vector(768), jsonb).
         stringtype: unspecified
   servlet:
     multipart:
@@ -45,12 +45,12 @@ app:
       # Tried in order at runtime; first success wins, the rest are fallbacks.
       providers:
         - groq
-        - openai
+        - gemini
     embedding:
       # Fixed at deploy time. Switching provider/dimensions requires re-embedding
       # all documents and a matching DB vector(N) column.
-      provider: openai
-      dimensions: 1536
+      provider: gemini
+      dimensions: 768
     openai:
       api-key: ${OPENAI_API_KEY:}
       chat-model: gpt-4o
