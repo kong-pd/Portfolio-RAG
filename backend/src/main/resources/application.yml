@@ -1,0 +1,54 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: portfolio-rag
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:postgres}:5432/${POSTGRES_DB:ragdb}
+    username: ${POSTGRES_USER:raguser}
+    password: ${POSTGRES_PASSWORD:changeme}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      data-source-properties:
+        # Lets the pg driver send untyped strings so they can be implicitly
+        # cast to non-varchar columns (vector(1536), jsonb).
+        stringtype: unspecified
+  servlet:
+    multipart:
+      max-file-size: 20MB
+      max-request-size: 22MB
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      embedding:
+        options:
+          model: text-embedding-3-small
+    vectorstore:
+      pgvector:
+        dimensions: 1536
+        index-type: IVFFLAT
+        distance-type: COSINE_DISTANCE
+        initialize-schema: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+# Application-specific settings
+app:
+  jwt:
+    secret: ${JWT_SECRET:change-this-to-a-256-bit-secret-in-production}
+    access-token-ttl: 15m
+    refresh-token-ttl: 7d
+  rag:
+    chunk-size: 512
+    chunk-overlap: 64
+    top-k: 5
+    similarity-threshold: 0.75

@@ -1,0 +1,7 @@
+\xEF\xBB\xBFid,type,question,source_doc,gold_evidence,expected_answer_points,expected_behavior,pass_criteria,notes,run_1,run_2
+Q01,factual,Access Token 的有效期是多久？,毕业设计报告_第三四章,Access Token 15 分钟；Refresh Token 7 天,Access 15 分钟；Refresh 7 天；双 Token 机制,answer,要点全覆盖且无编造,FR-01 来源,,
+Q02,factual,文档分块用的是什么策略？,毕业设计报告_第一二章,512 token；64 token 重叠；固定大小分块,固定大小分块；每块 512 token；相邻重叠 64 token,answer,要点全覆盖且无编造,2.2.3 与 FR-02 双来源,,
+Q03,synthesis,这个系统和 ChatPDF 这类产品的核心区别是什么？,两份报告,多用户隔离；可自托管；来源引用；黑盒架构,多用户数据隔离；自托管私有数据不出域；回答附来源引用；ChatPDF 聚焦单文档且架构黑盒不可定制,answer,至少覆盖 3 个要点且无编造,跨章节综合 2.3.1 + 1.4,,
+Q04,no_answer,系统支持语音输入或语音问答吗？,,（应无命中块或得分均低于 0.75）,—,refuse,触发「知识库中未找到」类话术且零编造,范围外问题；对应 AC-04.2,,
+Q05,multi_turn,（第 1 轮）RAG 检索的 Top-K 和阈值是多少？（第 2 轮）那低于这个阈值时系统会怎么做？,毕业设计报告_第三四章,k=5；0.75；知识库中未找到相关内容,第 1 轮：k=5、阈值 0.75；第 2 轮：提示知识库未找到、不编造回答,answer,第 2 轮须正确解析「这个阈值」的指代,验证 6 轮上下文注入；对应 AC-06.4,,
+Q06,edge,chunking戰略具体是怎麼做的 512？,毕业设计报告_第一二章,512 token；64 重叠,同 Q02,answer,简繁混杂 + 口语化表述仍应正确命中,鲁棒性样本,,
