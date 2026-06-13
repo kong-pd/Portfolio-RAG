@@ -21,10 +21,13 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -141,6 +144,136 @@ public class RagService {
         });
 
         return new ChatResponse(conversationIdResolved, answer, sources);
+    }
+
+    /**
+     * Streams the RAG answer as SSE events into {@code emitter}:
+     * <ul>
+     *   <li>{@code event:token} — each LLM text fragment as it arrives</li>
+     *   <li>{@code event:done}  — final JSON {@code {conversationId, sources}} after
+     *       the full answer has been persisted</li>
+     *   <li>{@code event:error} — error message if anything goes wrong</li>
+     * </ul>
+     * The synchronous setup (TX A, embedding, vector search) runs on the caller's
+     * thread; the LLM stream subscription is handed off to a Reactor
+     * {@code boundedElastic} thread so the Tomcat request thread returns immediately.
+     */
+    public void streamAnswer(Long userId, String question, Long conversationId, SseEmitter emitter) {
+        // TX A: resolve or create the conversation (sync).
+        Conversation conversation;
+        try {
+            conversation = transactionTemplate.execute(
+                    status -> resolveConversation(userId, question, conversationId));
+        } catch (Exception e) {
+            sseError(emitter, e.getMessage());
+            return;
+        }
+        final Conversation conv = conversation;
+        final Long convId = conv.getId();
+
+        List<org.springframework.ai.chat.messages.Message> history = loadHistory(convId, userId);
+
+        // Embed + vector search (sync, no TX).
+        float[] queryVector;
+        List<ChunkSearchResult> chunks;
+        try {
+            queryVector = embeddingModel.embed(question);
+            chunks = chunkRepository.searchSimilar(
+                    userId,
+                    toVectorLiteral(queryVector),
+                    properties.getRag().getSimilarityThreshold(),
+                    properties.getRag().getTopK());
+        } catch (Exception e) {
+            sseError(emitter, "Knowledge base search failed: " + e.getMessage());
+            return;
+        }
+
+        if (chunks.isEmpty()) {
+            transactionTemplate.executeWithoutResult(status -> {
+                saveMessage(conv, userId, Message.ROLE_USER, question, null, null, null);
+                saveMessage(conv, userId, Message.ROLE_ASSISTANT, NO_CONTEXT_ANSWER, List.of(), null, null);
+                touch(conv);
+            });
+            try {
+                emitter.send(SseEmitter.event().name("token").data(NO_CONTEXT_ANSWER));
+                emitter.send(SseEmitter.event().name("done").data(buildDoneJson(convId, List.of())));
+            } catch (IOException e) {
+                log.warn("SSE send failed (no-context)", e);
+            }
+            emitter.complete();
+            return;
+        }
+
+        String context = chunks.stream()
+                .map(ChunkSearchResult::getContent)
+                .collect(Collectors.joining("\n---\n"));
+        String systemPrompt = SYSTEM_PROMPT_TEMPLATE.formatted(context, question);
+
+        List<SourceItem> sources = chunks.stream()
+                .map(c -> new SourceItem(
+                        c.getChunkId(), c.getDocumentId(), c.getFilename(),
+                        c.getScore() != null ? c.getScore() : 0.0, c.getPageNum()))
+                .toList();
+
+        StringBuilder fullAnswer = new StringBuilder();
+
+        // Subscribe on Reactor boundedElastic — non-blocking from the caller's perspective.
+        var subscription = new reactor.core.Disposable[1];
+        subscription[0] = chatRouter.stream(systemPrompt, history, question)
+                .subscribe(
+                        token -> {
+                            if (token == null || token.isEmpty()) return;
+                            fullAnswer.append(token);
+                            try {
+                                emitter.send(SseEmitter.event().name("token").data(token));
+                            } catch (IOException e) {
+                                if (subscription[0] != null) subscription[0].dispose();
+                                emitter.completeWithError(e);
+                            }
+                        },
+                        error -> {
+                            log.error("LLM stream error for conversation {}", convId, error);
+                            sseError(emitter, error.getMessage() != null
+                                    ? error.getMessage() : "LLM streaming failed");
+                        },
+                        () -> {
+                            String answer = fullAnswer.toString();
+                            try {
+                                transactionTemplate.executeWithoutResult(status -> {
+                                    saveMessage(conv, userId, Message.ROLE_USER, question, null, null, null);
+                                    saveMessage(conv, userId, Message.ROLE_ASSISTANT, answer, sources, null, null);
+                                    touch(conv);
+                                });
+                                emitter.send(SseEmitter.event().name("done")
+                                        .data(buildDoneJson(convId, sources)));
+                            } catch (Exception e) {
+                                log.error("Failed to persist streamed answer for conversation {}", convId, e);
+                                sseError(emitter, "Failed to save conversation");
+                                return;
+                            }
+                            emitter.complete();
+                        }
+                );
+
+        // Cancel the stream if the client disconnects before it finishes.
+        emitter.onTimeout(() -> { if (subscription[0] != null) subscription[0].dispose(); });
+        emitter.onError(t  -> { if (subscription[0] != null) subscription[0].dispose(); });
+    }
+
+    private String buildDoneJson(Long conversationId, List<SourceItem> sources) {
+        try {
+            return objectMapper.writeValueAsString(
+                    Map.of("conversationId", conversationId, "sources", sources));
+        } catch (JsonProcessingException e) {
+            return "{\"conversationId\":" + conversationId + ",\"sources\":[]}";
+        }
+    }
+
+    private void sseError(SseEmitter emitter, String message) {
+        try {
+            emitter.send(SseEmitter.event().name("error").data(message != null ? message : "Unknown error"));
+        } catch (IOException ex) { /* client already gone */ }
+        emitter.complete();
     }
 
     private Conversation resolveConversation(Long userId, String question, Long conversationId) {

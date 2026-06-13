@@ -4,6 +4,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.model.ChatResponse;
+import reactor.core.publisher.Flux;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.List;
 
@@ -53,5 +55,43 @@ public class ChatRouter {
         }
         throw new RuntimeException("All AI chat providers failed. Last error: "
                 + (lastException != null ? lastException.getMessage() : "unknown"), lastException);
+    }
+
+    /**
+     * Streams tokens from the first available provider, falling back to the next on
+     * error. Subscription is offloaded to {@code Schedulers.boundedElastic()} so the
+     * caller (Tomcat request thread) is never blocked waiting for the first token.
+     */
+    public Flux<String> stream(String systemPrompt, List<Message> history, String userMessage) {
+        if (clients.isEmpty()) {
+            return Flux.error(new RuntimeException(
+                    "No AI chat providers are configured. Set GROQ_API_KEY or GOOGLE_API_KEY."));
+        }
+        Flux<String> chain = buildAttempt(0, systemPrompt, history, userMessage);
+        for (int i = 1; i < clients.size(); i++) {
+            final int idx = i;
+            chain = chain.onErrorResume(e -> {
+                log.warn("Stream provider '{}' failed: {}. Falling back to '{}'.",
+                        safeProviderName(idx - 1), e.getMessage(), safeProviderName(idx));
+                return buildAttempt(idx, systemPrompt, history, userMessage);
+            });
+        }
+        return chain.subscribeOn(Schedulers.boundedElastic());
+    }
+
+    private Flux<String> buildAttempt(int idx, String systemPrompt,
+                                      List<Message> history, String userMessage) {
+        String name = safeProviderName(idx);
+        return clients.get(idx).prompt()
+                .system(systemPrompt)
+                .messages(history)
+                .user(userMessage)
+                .stream()
+                .content()
+                .doOnSubscribe(s -> log.debug("Streaming via provider: {}", name));
+    }
+
+    private String safeProviderName(int idx) {
+        return idx < providerNames.size() ? providerNames.get(idx) : "provider-" + idx;
     }
 }

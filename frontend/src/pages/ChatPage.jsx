@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   getMessages,
   listConversations,
-  sendMessage,
+  streamMessage,
 } from '../api/chat'
 import ConversationList from '../components/ConversationList'
 import MessageBubble from '../components/MessageBubble'
@@ -70,37 +70,52 @@ function ChatPage() {
     const text = question.trim()
     if (!text || sending) return
 
-    // Optimistically append the user's message.
-    const userMsg = { id: `tmp-${Date.now()}`, role: 'user', content: text }
-    setMessages((prev) => [...prev, userMsg])
+    // Optimistically show the user message.
+    setMessages((prev) => [...prev, { id: `u-${Date.now()}`, role: 'user', content: text }])
     setQuestion('')
     setSending(true)
 
-    try {
-      const data = await sendMessage(text, activeId || undefined)
-      const assistantMsg = {
-        id: `a-${Date.now()}`,
-        role: 'assistant',
-        content: data.answer,
-        sources: data.sources,
-      }
-      setMessages((prev) => [...prev, assistantMsg])
+    // Placeholder assistant bubble — gets filled token by token.
+    const assistantId = `a-${Date.now()}`
+    setMessages((prev) => [...prev, { id: assistantId, role: 'assistant', content: '', sources: [] }])
 
-      // First message in a brand-new conversation: adopt the returned id and
-      // refresh the sidebar list.
-      if (!activeId && data.conversationId) {
-        setActiveId(data.conversationId)
-        fetchConversations()
+    try {
+      for await (const event of streamMessage(text, activeId || undefined)) {
+        if (event.type === 'token') {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, content: m.content + event.data } : m
+            )
+          )
+        } else if (event.type === 'done') {
+          const meta = JSON.parse(event.data)
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, sources: meta.sources || [] } : m
+            )
+          )
+          if (!activeId && meta.conversationId) {
+            setActiveId(meta.conversationId)
+            fetchConversations()
+          }
+        } else if (event.type === 'error') {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId
+                ? { ...m, content: m.content || event.data || 'Something went wrong.' }
+                : m
+            )
+          )
+        }
       }
     } catch (err) {
-      const errMsg = {
-        id: `e-${Date.now()}`,
-        role: 'assistant',
-        content:
-          err.response?.data?.message ||
-          'Something went wrong. Please try again.',
-      }
-      setMessages((prev) => [...prev, errMsg])
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId
+            ? { ...m, content: m.content || err.message || 'Something went wrong. Please try again.' }
+            : m
+        )
+      )
     } finally {
       setSending(false)
     }
@@ -173,9 +188,9 @@ function ChatPage() {
               />
             ))
           )}
-          {sending && (
+          {sending && messages.at(-1)?.content === '' && (
             <div style={{ color: '#888', fontSize: 14, paddingLeft: 4 }}>
-              Generating response…
+              Thinking…
             </div>
           )}
         </div>
@@ -220,7 +235,7 @@ function ChatPage() {
                 sending || !question.trim() ? 'not-allowed' : 'pointer',
             }}
           >
-            {sending ? 'Sending…' : 'Send'}
+            {sending ? 'Generating…' : 'Send'}
           </button>
         </form>
       </section>
