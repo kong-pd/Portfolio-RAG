@@ -9,4 +9,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
 
     /** Most recent messages first; callers reverse for chronological order. */
     List<Message> findTop6ByConversationIdAndUserIdOrderByCreatedAtDesc(Long conversationId, Long userId);
+
+    /** Full message history in chronological order. */
+    List<Message> findByConversationIdAndUserIdOrderByCreatedAtAsc(Long conversationId, Long userId);
 }

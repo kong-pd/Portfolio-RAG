@@ -11,7 +11,9 @@ public record MessageDTO(
         String role,
         String content,
         @JsonRawValue String sources,
-        Instant createdAt
+        Instant createdAt,
+        Integer promptTokens,
+        Integer completionTokens
 ) {
 
     public static MessageDTO from(Message message) {
@@ -21,7 +23,9 @@ public record MessageDTO(
                 message.getRole(),
                 message.getContent(),
                 message.getSources(),
-                message.getCreatedAt()
+                message.getCreatedAt(),
+                message.getPromptTokens(),
+                message.getCompletionTokens()
         );
     }
 }
