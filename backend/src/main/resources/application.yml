@@ -39,7 +39,7 @@ app:
     chunk-size: 512
     chunk-overlap: 64
     top-k: 5
-    similarity-threshold: 0.75
+    similarity-threshold: 0.55
   ai:
     chat:
       # Tried in order at runtime; first success wins, the rest are fallbacks.
@@ -63,4 +63,4 @@ app:
       api-key: ${GOOGLE_API_KEY:}
       base-url: https://generativelanguage.googleapis.com/v1beta/openai
       chat-model: gemini-2.0-flash
-      embedding-model: text-embedding-004   # 768-dim; switching needs schema migration
+      embedding-model: gemini-embedding-001  # native 3072-dim, truncated to 768 via dimensions param

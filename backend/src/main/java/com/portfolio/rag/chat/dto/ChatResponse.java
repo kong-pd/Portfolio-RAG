@@ -4,7 +4,7 @@ import java.util.List;
 
 public record ChatResponse(
         Long conversationId,
-        String content,
+        String answer,
         List<SourceItem> sources
 ) {
 }

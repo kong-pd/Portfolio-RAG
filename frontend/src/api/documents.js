@@ -8,9 +8,10 @@ export async function listDocuments(page = 0, size = 10) {
 export async function uploadDocument(file) {
   const formData = new FormData()
   formData.append('file', file)
-  const { data } = await client.post('/documents/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
+  // Let the browser/axios set Content-Type to multipart/form-data WITH the
+  // required boundary. Setting it manually (without a boundary) yields a
+  // malformed header and can interfere with header handling, so we omit it.
+  const { data } = await client.post('/documents/upload', formData)
   return data
 }
 

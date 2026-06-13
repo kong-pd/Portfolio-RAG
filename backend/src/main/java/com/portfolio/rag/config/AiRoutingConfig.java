@@ -43,7 +43,7 @@ public class AiRoutingConfig {
     private static final String DEFAULT_GEMINI_BASE_URL =
             "https://generativelanguage.googleapis.com/v1beta/openai";
     private static final String DEFAULT_GEMINI_CHAT_MODEL = "gemini-2.0-flash";
-    private static final String DEFAULT_GEMINI_EMBEDDING_MODEL = "text-embedding-004";
+    private static final String DEFAULT_GEMINI_EMBEDDING_MODEL = "gemini-embedding-001";
 
     private final AppProperties.Ai ai;
 
@@ -177,9 +177,10 @@ public class AiRoutingConfig {
         OpenAiApi api = apiBuilder.build();
 
         String model = cfg.getEmbeddingModel() != null ? cfg.getEmbeddingModel() : defaultModel;
+        int dimensions = ai.getEmbedding().getDimensions();
         return new OpenAiEmbeddingModel(
                 api,
                 org.springframework.ai.document.MetadataMode.EMBED,
-                OpenAiEmbeddingOptions.builder().model(model).build());
+                OpenAiEmbeddingOptions.builder().model(model).dimensions(dimensions).build());
     }
 }
