@@ -633,4 +633,3 @@ PoC 建议检查：
 | 2026-07-18 | 产品不等于单一 Skill | Compiler 是产品；Skills、Agent files 与 prompts 是可生成 artifacts；MCP/RAG 是可选接口 |
 | 2026-07-18 | 与 Portfolio-RAG 采用 sibling product + separate repo | 保留关联叙事，但避免违反现有 out-of-scope、domain model 与 Gate 交付纪律 |
 | 2026-07-18 | MVP 不做 MCP、复杂 RAG 或 Web UI | 先验证 schema + template + BYOM + continuity 这一最小价值闭环 |
-
